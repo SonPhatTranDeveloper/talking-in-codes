@@ -29,9 +29,9 @@ Example usage:
 
     # With caching enabled and unique embeddings
     uv run src/scripts/extract_hierarchical_embeddings.py \
-        --input-parquet data/embeddings/words_small.parquet \
-        --output-csv data/clusters/clusters_small.csv \
-        --cluster-levels 50 100 1000 \
+        --input-parquet data/embeddings/words.parquet \
+        --output-csv data/clusters/clusters.csv \
+        --cluster-levels 500 1000 5000 \
         --linkage ward \
         --metric euclidean \
         --cache-dir cache/linkage_matrices \
