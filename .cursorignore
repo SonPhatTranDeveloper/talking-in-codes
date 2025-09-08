@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environments
+.env
+
+# Hydra outputs
+outputs/
+
+# Model files
+models/
+
+# Data files
+data/
+
+# Logs
+logs/
+
+# Results
+results/

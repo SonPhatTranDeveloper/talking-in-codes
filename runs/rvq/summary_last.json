@@ -1,0 +1,24 @@
+{
+  "epoch": 100,
+  "global_step": 7800,
+  "best_metric": 6.522962146335178,
+  "training_config": {
+    "csv_path": "data/embeddings/words.csv",
+    "config_path": "",
+    "output_dir": "runs/rvq",
+    "epochs": 100,
+    "batch_size": 256,
+    "learning_rate": 1e-06,
+    "weight_decay": 0.0,
+    "num_workers": 4,
+    "device": "cpu",
+    "val_split": 0.1,
+    "seed": 42,
+    "log_interval": 100,
+    "lambda_codebook": 1.0,
+    "lambda_commitment": 0.2,
+    "grad_clip_norm": 0.0,
+    "pin_memory": true,
+    "persistent_workers": true
+  }
+}

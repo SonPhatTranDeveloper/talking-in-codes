@@ -1,0 +1,34 @@
+# Model configuration
+model:
+  _target_: src.utils.model.autoencoder.RQVAEAutoencoder
+  input_dim: 300
+  hidden_dims: [100, 50]
+  output_dim: 50
+  num_quantizers: 4
+  codebook_size: 1000
+
+# Dataset configuration
+dataset:
+  _target_: src.utils.dataset.torch_dataset.EmbeddingDataset
+  csv_path: /Users/sonphat.tran/Desktop/Personal/conversing-in-semantic-id/data/embeddings/words.csv
+  embedding_column: embedding
+
+# Optimizer configuration
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 5e-4
+  weight_decay: 0.0
+  betas: [0.9, 0.999]
+
+# Training settings
+training:
+  epochs: 100
+  device: cpu
+  batch_size: 128
+  num_workers: 4
+  pin_memory: true
+  persistent_workers: true
+  val_split: 0.1
+  seed: 42
+  alpha: 10
+  save_model_path: /Users/sonphat.tran/Desktop/Personal/conversing-in-semantic-id/models/rq_vae/rqvae_autoencoder.pth
