@@ -11,8 +11,8 @@ The embedding is stored as a native array in the parquet format.
 Example usage:
 
     uv run src/scripts/create_embedding_dataset.py \
-        --input-csv data/words/words.csv \
-        --output-parquet data/embeddings/words.parquet \
+        --input-csv data/words/words_small.csv \
+        --output-parquet data/embeddings/words_small.parquet \
         --custom-model models/word2vec/wiki_skipgram_v1.model \
         --on-missing skip
 """

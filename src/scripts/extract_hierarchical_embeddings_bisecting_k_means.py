@@ -1,40 +1,38 @@
 #!/usr/bin/env python3
 """
-Extract Multi-Level Hierarchical Embeddings
+Extract Multi-Level Bisecting K-Means Embeddings
 
-Reads a parquet file containing word embeddings, performs hierarchical clustering
-on the embeddings, and extracts multiple levels of flat clusters using fcluster.
+Reads a parquet file containing word embeddings, performs bisecting k-means clustering
+on the embeddings, and extracts multiple levels of flat clusters at different k values.
 Saves the results to a CSV file with word and discrete embedding arrays representing
-cluster assignments at different hierarchical levels.
+cluster assignments at different cluster levels.
 
-The script supports various linkage methods and distance metrics for hierarchical
-clustering, and allows specification of multiple cluster levels simultaneously.
+The script supports various distance metrics for bisecting k-means clustering,
+and allows specification of multiple cluster levels simultaneously.
 The output includes a discrete embedding array where each position represents
 the cluster assignment at that level.
 
 Caching Support:
-The script supports caching of the computationally expensive linkage matrix to
+The script supports caching of the computationally expensive clustering models to
 speed up subsequent runs with the same embeddings and clustering parameters.
 Use --cache-dir to enable caching, and --force-recompute to bypass cache.
 
 Example usage:
 
     # Basic usage
-    uv run src/scripts/extract_hierarchical_embeddings.py \
+    uv run src/scripts/extract_hierarchical_embeddings_bisecting_k_means.py \
         --input-parquet data/embeddings/words.parquet \
         --output-csv data/clusters/clusters.csv \
         --cluster-levels 20 200 1000 \
-        --linkage ward \
         --metric euclidean
 
     # With caching enabled and unique embeddings
-    uv run src/scripts/extract_hierarchical_embeddings.py \
+    uv run src/scripts/extract_hierarchical_embeddings_bisecting_k_means.py \
         --input-parquet data/embeddings/words_small.parquet \
         --output-csv data/clusters/clusters_small.csv \
-        --cluster-levels 50 100 1000 \
-        --linkage ward \
+        --cluster-levels 1000 1000 1000 \
         --metric euclidean \
-        --cache-dir cache/linkage_matrices \
+        --cache-dir cache/bisecting_kmeans_models \
         --ensure-unique
 """
 
@@ -63,7 +61,7 @@ def parse_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Load embedding parquet file, perform hierarchical clustering, "
+            "Load embedding parquet file, perform bisecting k-means clustering, "
             "and save clusters to CSV"
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -88,34 +86,32 @@ def parse_arguments() -> argparse.Namespace:
         "--cluster-levels",
         type=int,
         nargs="+",
+        required=True,
         help="List of cluster levels to extract (e.g., 2 3 4 10 50 100)",
-    )
-    clustering_group.add_argument(
-        "--thresholds",
-        type=float,
-        nargs="+",
-        help="List of distance thresholds for cluster extraction (mutually exclusive with --cluster-levels)",
-    )
-    clustering_group.add_argument(
-        "--linkage",
-        type=str,
-        choices=[
-            "single",
-            "complete",
-            "average",
-            "weighted",
-            "centroid",
-            "median",
-            "ward",
-        ],
-        default="ward",
-        help="Linkage method for hierarchical clustering",
     )
     clustering_group.add_argument(
         "--metric",
         type=str,
         default="euclidean",
-        help="Distance metric for clustering (e.g., euclidean, cosine, manhattan)",
+        help="Distance metric for clustering (euclidean, cosine)",
+    )
+    clustering_group.add_argument(
+        "--n-init",
+        type=int,
+        default=10,
+        help="Number of random initializations for k-means",
+    )
+    clustering_group.add_argument(
+        "--max-iter",
+        type=int,
+        default=300,
+        help="Maximum number of iterations for k-means",
+    )
+    clustering_group.add_argument(
+        "--random-state",
+        type=int,
+        default=42,
+        help="Random state for reproducible results",
     )
 
     output_group = parser.add_argument_group("Output Options")
@@ -123,11 +119,6 @@ def parse_arguments() -> argparse.Namespace:
         "--include-embeddings",
         action="store_true",
         help="Include original embeddings in the output CSV",
-    )
-    output_group.add_argument(
-        "--save-dendrogram",
-        type=Path,
-        help="Optional path to save dendrogram plot as PNG",
     )
     output_group.add_argument(
         "--ensure-unique",
@@ -139,7 +130,7 @@ def parse_arguments() -> argparse.Namespace:
     cache_group.add_argument(
         "--cache-dir",
         type=Path,
-        help="Directory to store cached linkage matrices (enables caching if provided)",
+        help="Directory to store cached clustering models (enables caching if provided)",
     )
     cache_group.add_argument(
         "--force-recompute",
@@ -159,24 +150,19 @@ def validate_arguments(args: argparse.Namespace) -> None:
     Raises:
         ValueError: If arguments are invalid or conflicting.
     """
-    if args.cluster_levels is None and args.thresholds is None:
-        raise ValueError("Must specify either --cluster-levels or --thresholds")
+    if any(n < 1 for n in args.cluster_levels):
+        raise ValueError("All cluster levels must be positive")
+    if len(set(args.cluster_levels)) != len(args.cluster_levels):
+        raise ValueError("Cluster levels must be unique")
 
-    if args.cluster_levels is not None and args.thresholds is not None:
-        raise ValueError("Cannot specify both --cluster-levels and --thresholds")
+    if args.metric not in ["euclidean", "cosine"]:
+        raise ValueError("Metric must be either 'euclidean' or 'cosine'")
 
-    if args.cluster_levels is not None:
-        if any(n < 1 for n in args.cluster_levels):
-            raise ValueError("All cluster levels must be positive")
-        if len(set(args.cluster_levels)) != len(args.cluster_levels):
-            raise ValueError("Cluster levels must be unique")
+    if args.n_init < 1:
+        raise ValueError("n_init must be positive")
 
-    if args.thresholds is not None:
-        if any(t <= 0 for t in args.thresholds):
-            raise ValueError("All thresholds must be positive")
-
-    if args.linkage == "ward" and args.metric != "euclidean":
-        raise ValueError("Ward linkage requires euclidean metric")
+    if args.max_iter < 1:
+        raise ValueError("max_iter must be positive")
 
 
 def load_embeddings(input_path: Path) -> tuple[pd.DataFrame, np.ndarray]:
@@ -205,23 +191,25 @@ def load_embeddings(input_path: Path) -> tuple[pd.DataFrame, np.ndarray]:
     return df, embeddings
 
 
-def generate_cache_key(embeddings: np.ndarray, linkage_method: str, metric: str) -> str:
+def generate_cache_key(
+    embeddings: np.ndarray, metric: str, n_init: int, max_iter: int, random_state: int
+) -> str:
     """Generate a unique cache key for the clustering parameters.
 
     Args:
         embeddings: Matrix of embeddings (n_samples x n_features).
-        linkage_method: Linkage method for clustering.
         metric: Distance metric to use.
+        n_init: Number of random initializations.
+        max_iter: Maximum number of iterations.
+        random_state: Random state for reproducibility.
 
     Returns:
         Unique cache key string.
     """
     # Create a hash based on embeddings shape, data hash, and parameters
     embeddings_hash = hashlib.md5(embeddings.tobytes()).hexdigest()
-    param_string = (
-        f"{linkage_method}_{metric}_{embeddings.shape[0]}_{embeddings.shape[1]}"
-    )
-    cache_key = f"linkage_{param_string}_{embeddings_hash[:16]}"
+    param_string = f"{metric}_{n_init}_{max_iter}_{random_state}_{embeddings.shape[0]}_{embeddings.shape[1]}"
+    cache_key = f"bisecting_kmeans_{param_string}_{embeddings_hash[:16]}"
     return cache_key
 
 

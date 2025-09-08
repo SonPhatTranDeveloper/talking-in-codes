@@ -20,3 +20,6 @@ models/
 
 # Data files
 data/
+
+# Cache
+cache/
