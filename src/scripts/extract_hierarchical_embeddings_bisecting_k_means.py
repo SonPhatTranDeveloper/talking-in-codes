@@ -28,8 +28,8 @@ Example usage:
 
     # With caching enabled and unique embeddings
     uv run src/scripts/extract_hierarchical_embeddings_bisecting_k_means.py \
-        --input-parquet data/embeddings/words_small.parquet \
-        --output-csv data/clusters/clusters_small.csv \
+        --input-parquet data/embeddings/words.parquet \
+        --output-csv data/clusters/clusters.csv \
         --cluster-levels 1000 1000 1000 \
         --metric euclidean \
         --cache-dir cache/bisecting_kmeans_models \
