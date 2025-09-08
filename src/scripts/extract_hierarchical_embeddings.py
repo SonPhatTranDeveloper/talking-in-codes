@@ -15,9 +15,9 @@ the cluster assignment at that level.
 Example usage:
 
     uv run src/scripts/extract_hierarchical_embeddings.py \
-        --input-parquet data/embeddings/words_reduced.parquet \
-        --output-csv data/clusters/hierarchical_clusters_reduced.csv \
-        --cluster-levels 20 200 1000 5000 \
+        --input-parquet data/embeddings/words.parquet \
+        --output-csv data/clusters/clusters.csv \
+        --cluster-levels 20 200 1000 170000 \
         --linkage ward \
         --metric euclidean
 """
